@@ -154,3 +154,61 @@ class ConsultorCarreira(KnowledgeEngine):
     @Rule(Perfil(atuacao="servidores", entrega="seguranca"))
     def r25(self):
         self._disparar("R25")
+
+    @Rule(Perfil(), salience=-100)
+    def decidir(self):
+        self.resultado = self._consolidar()
+
+    def _consolidar(self) -> Resultado:
+        n_regras_pos = {tid: 0 for tid in TRILHAS}
+        for rid in self.disparos:
+            for trilha, pts in REGRAS[rid]["efeitos"].items():
+                if pts > 0:
+                    n_regras_pos[trilha] += 1
+
+        ordem = list(TRILHAS)
+        ranking = sorted(
+            self.pontos.items(),
+            key=lambda kv: (-kv[1], -n_regras_pos[kv[0]], ordem.index(kv[0])),
+        )
+        melhor_id, melhor_pts = ranking[0]
+
+        if melhor_pts <= 0:
+            return Resultado(
+                trilha_id=None,
+                ranking=ranking,
+                regras_disparadas=list(self.disparos),
+                mensagem="As respostas não ativaram regras suficientes para uma recomendação.",
+            )
+
+        total_pos = sum(p for _, p in ranking if p > 0)
+        empate = len(ranking) > 1 and ranking[1][1] == melhor_pts
+
+        venc, outras = [], []
+        for rid in self.disparos:
+            regra = REGRAS[rid]
+            item = {
+                "id": rid,
+                "condicao": regra["condicao"],
+                "motivo": regra["motivo"],
+                "efeitos": regra["efeitos"],
+                "pontos": regra["efeitos"].get(melhor_id, 0),
+            }
+            (venc if melhor_id in regra["efeitos"] else outras).append(item)
+
+        msg = ""
+        if empate:
+            msg = (
+                f"Empate técnico com {TRILHAS[ranking[1][0]]['nome']}. "
+                "Desempate pelo número de regras favoráveis."
+            )
+        return Resultado(
+            trilha_id=melhor_id,
+            ranking=ranking,
+            regras_vencedora=venc,
+            outras_regras=outras,
+            regras_disparadas=list(self.disparos),
+            aderencia=round(100 * melhor_pts / total_pos),
+            empate=empate,
+            mensagem=msg,
+        )
