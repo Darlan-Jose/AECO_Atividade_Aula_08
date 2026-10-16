@@ -212,3 +212,16 @@ class ConsultorCarreira(KnowledgeEngine):
             empate=empate,
             mensagem=msg,
         )
+
+
+def consultar(respostas: dict) -> Resultado:
+    respostas = limpar_respostas(respostas)
+    faltando = [p["id"] for p in perguntas_visiveis(respostas) if p["id"] not in respostas]
+    if faltando:
+        raise ValueError(f"Perguntas sem resposta: {', '.join(faltando)}")
+
+    motor = ConsultorCarreira()
+    motor.reset()
+    motor.declare(Perfil(**respostas))
+    motor.run()
+    return motor.resultado
